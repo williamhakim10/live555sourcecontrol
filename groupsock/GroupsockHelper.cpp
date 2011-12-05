@@ -37,7 +37,7 @@ netAddressBits SendingInterfaceAddr = INADDR_ANY;
 netAddressBits ReceivingInterfaceAddr = INADDR_ANY;
 
 static void socketErr(UsageEnvironment& env, char const* errorMsg) {
-	env.setResultErrMsg(errorMsg);
+  env.setResultErrMsg(errorMsg);
 }
 
 static int reuseFlag = 1;
@@ -50,13 +50,31 @@ NoReuse::~NoReuse() {
   reuseFlag = 1;
 }
 
+static int createSocket(int type) {
+  // Call "socket()" to create a (IPv4) socket of the specified type.
+  // But also set it to have the 'close on exec' property (if we can)
+  int sock;
+
+#ifdef SOCK_CLOEXEC
+  sock = socket(AF_INET, type|SOCK_CLOEXEC, 0);
+  if (sock != -1 || errno != EINVAL) return sock;
+  // An "errno" of EINVAL likely means that the system wasn't happy with the SOCK_CLOEXEC; fall through and try again without it:
+#endif
+
+  sock = socket(AF_INET, type, 0);
+#ifdef FD_CLOEXEC
+  if (sock != -1) fcntl(sock, F_SETFD, FD_CLOEXEC);
+#endif
+  return sock;
+}
+
 int setupDatagramSocket(UsageEnvironment& env, Port port) {
   if (!initializeWinsockIfNecessary()) {
     socketErr(env, "Failed to initialize 'winsock': ");
     return -1;
   }
 
-  int newSocket = socket(AF_INET, SOCK_DGRAM, 0);
+  int newSocket = createSocket(SOCK_DGRAM);
   if (newSocket < 0) {
     socketErr(env, "unable to create datagram socket: ");
     return newSocket;
@@ -130,7 +148,7 @@ int setupDatagramSocket(UsageEnvironment& env, Port port) {
 }
 
 Boolean makeSocketNonBlocking(int sock) {
-#if defined(__WIN32__) || defined(_WIN32) || defined(IMN_PIM)
+#if defined(__WIN32__) || defined(_WIN32)
   unsigned long arg = 1;
   return ioctlsocket(sock, FIONBIO, &arg) == 0;
 #elif defined(VXWORKS)
@@ -143,7 +161,7 @@ Boolean makeSocketNonBlocking(int sock) {
 }
 
 Boolean makeSocketBlocking(int sock) {
-#if defined(__WIN32__) || defined(_WIN32) || defined(IMN_PIM)
+#if defined(__WIN32__) || defined(_WIN32)
   unsigned long arg = 0;
   return ioctlsocket(sock, FIONBIO, &arg) == 0;
 #elif defined(VXWORKS)
@@ -162,7 +180,7 @@ int setupStreamSocket(UsageEnvironment& env,
     return -1;
   }
 
-  int newSocket = socket(AF_INET, SOCK_STREAM, 0);
+  int newSocket = createSocket(SOCK_STREAM);
   if (newSocket < 0) {
     socketErr(env, "unable to create stream socket: ");
     return newSocket;
@@ -685,7 +703,7 @@ char const* timestampString() {
   return (char const*)&timeString;
 }
 
-#if (defined(__WIN32__) || defined(_WIN32)) && !defined(IMN_PIM)
+#if defined(__WIN32__) || defined(_WIN32)
 // For Windoze, we need to implement our own gettimeofday()
 #if !defined(_WIN32_WCE)
 #include <sys/timeb.h>
