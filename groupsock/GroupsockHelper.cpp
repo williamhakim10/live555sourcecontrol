@@ -23,7 +23,6 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #if defined(__WIN32__) || defined(_WIN32)
 #include <time.h>
 extern "C" int initializeWinsockIfNecessary();
-#define USE_GETHOSTBYNAME 1 /*because at least some Windows don't have getaddrinfo()*/
 #else
 #include <stdarg.h>
 #include <time.h>
@@ -498,12 +497,12 @@ Boolean getSourcePort(UsageEnvironment& env, int socket, Port& port) {
   return True;
 }
 
-static Boolean badAddress(netAddressBits addr) {
+static Boolean badAddressForUs(netAddressBits addr) {
   // Check for some possible erroneous addresses:
-  netAddressBits hAddr = ntohl(addr);
-  return (hAddr == 0x7F000001 /* 127.0.0.1 */
-	  || hAddr == 0
-	  || hAddr == (netAddressBits)(~0));
+  netAddressBits nAddr = htonl(addr);
+  return (nAddr == 0x7F000001 /* 127.0.0.1 */
+	  || nAddr == 0
+	  || nAddr == (netAddressBits)(~0));
 }
 
 Boolean loopbackWorks = 1;
@@ -562,6 +561,11 @@ netAddressBits ourIPAddress(UsageEnvironment& env) {
       loopbackWorks = 1;
     } while (0);
 
+    if (sock >= 0) {
+      socketLeaveGroup(env, sock, testAddr.s_addr);
+      closeSocket(sock);
+    }
+
     if (!loopbackWorks) do {
       // We couldn't find our address using multicast loopback,
       // so try instead to look it up directly - by first getting our host name, and then resolving this host name
@@ -573,85 +577,35 @@ netAddressBits ourIPAddress(UsageEnvironment& env) {
 	break;
       }
 
-#if defined(VXWORKS)
-#include <hostLib.h>
-      if (ERROR == (ourAddress = hostGetByName( hostname ))) break;
-#else
-      // Try to resolve "hostname" to an IP address
-#ifdef USE_GETHOSTBYNAME
-      struct hostent* hstent = (struct hostent*)gethostbyname(hostname);
-      if (hstent == NULL || hstent->h_length != 4) {
-	env.setResultErrMsg("gethostbyname() failed");
-	break;
-      }
+      // Try to resolve "hostname" to an IP address:
+      NetAddressList addresses(hostname);
+      NetAddressList::Iterator iter(addresses);
+      NetAddress const* address;
 
-      unsigned i = 0;
-#else
-      // Use "getaddrinfo()" (rather than the older, deprecated "gethostbyname()"):
-      struct addrinfo addrinfoHints;
-      memset(&addrinfoHints, 0, sizeof addrinfoHints);
-      addrinfoHints.ai_family = AF_INET; // For now, we're interested in IPv4 addresses only
-      struct addrinfo* addrinfoResultPtr = NULL;
-      result = getaddrinfo(hostname, NULL, &addrinfoHints, &addrinfoResultPtr);
-      if (result != 0 || addrinfoResultPtr == NULL) {
-	env.setResultErrMsg("getaddrinfo() failed");
-	break;
-      }
-
-      const struct addrinfo* p = addrinfoResultPtr;
-#endif
       // Take the first address that's not bad:
       netAddressBits addr = 0;
-      while (1) {
-	netAddressBits a;
-#ifdef USE_GETHOSTBYNAME
-	char* addrPtr = hstent->h_addr_list[i];
-	if (addrPtr == NULL) break;
-
-	a = *(netAddressBits*)addrPtr;
-	++i;
-#else
-	if (p == NULL) break;
-
-	a = ((struct sockaddr_in*)p->ai_addr)->sin_addr.s_addr;
-	p = p->ai_next;
-#endif
-	if (!badAddress(a)) {
+      while ((address = iter.nextAddress()) != NULL) {
+	netAddressBits a = *(netAddressBits*)(address->data());
+	if (!badAddressForUs(a)) {
 	  addr = a;
 	  break;
 	}
       }
-#ifdef USE_GETHOSTBYNAME
-#else
-      freeaddrinfo(addrinfoResultPtr);
-#endif
 
-      if (addr != 0) {
-	fromAddr.sin_addr.s_addr = addr;
-      } else {
-	env.setResultMsg("no address");
-	break;
-      }
+      // Assign the address that we found to "fromAddr" (as if the 'loopback' method had worked), to simplify the code below: 
+      fromAddr.sin_addr.s_addr = addr;
     } while (0);
 
     // Make sure we have a good address:
     netAddressBits from = fromAddr.sin_addr.s_addr;
-    if (badAddress(from)) {
+    if (badAddressForUs(from)) {
       char tmp[100];
-      sprintf(tmp,
-	      "This computer has an invalid IP address: 0x%x",
-	      (netAddressBits)(ntohl(from)));
+      sprintf(tmp, "This computer has an invalid IP address: %s", AddressString(from).val());
       env.setResultMsg(tmp);
       from = 0;
     }
 
     ourAddress = from;
-#endif
-
-    if (sock >= 0) {
-      socketLeaveGroup(env, sock, testAddr.s_addr);
-      closeSocket(sock);
-    }
 
     // Use our newly-discovered IP address, and the current time,
     // to initialize the random number generator's seed:
@@ -672,7 +626,7 @@ netAddressBits chooseRandomIPv4SSMAddress(UsageEnvironment& env) {
   netAddressBits const first = 0xE8000100, lastPlus1 = 0xE8FFFFFF;
   netAddressBits const range = lastPlus1 - first;
 
-  return htonl(first + ((netAddressBits)our_random())%range);
+  return ntohl(first + ((netAddressBits)our_random())%range);
 }
 
 char const* timestampString() {
