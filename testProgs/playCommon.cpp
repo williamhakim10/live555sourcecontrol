@@ -13,7 +13,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
-// Copyright (c) 1996-2011, Live Networks, Inc.  All rights reserved
+// Copyright (c) 1996-2012, Live Networks, Inc.  All rights reserved
 // A common framework, used for the "openRTSP" and "playSIP" applications
 // Implementation
 
@@ -310,7 +310,7 @@ int main(int argc, char** argv) {
 	}
       }
 
-      ourAuthenticator = new Authenticator(username,password);
+      ourAuthenticator = new Authenticator(username, password);
       break;
     }
 
@@ -528,7 +528,7 @@ void continueAfterOPTIONS(RTSPClient*, int resultCode, char* resultString) {
 
 void continueAfterDESCRIBE(RTSPClient*, int resultCode, char* resultString) {
   if (resultCode != 0) {
-    *env << "Failed to get a SDP description from URL \"" << streamURL << "\": " << resultString << "\n";
+    *env << "Failed to get a SDP description for the URL \"" << streamURL << "\": " << resultString << "\n";
     shutdown();
   }
 
@@ -542,7 +542,7 @@ void continueAfterDESCRIBE(RTSPClient*, int resultCode, char* resultString) {
     *env << "Failed to create a MediaSession object from the SDP description: " << env->getResultMsg() << "\n";
     shutdown();
   } else if (!session->hasSubsessions()) {
-    *env << "This session has no media subsessions (i.e., \"m=\" lines)\n";
+    *env << "This session has no media subsessions (i.e., no \"m=\" lines)\n";
     shutdown();
   }
 

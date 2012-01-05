@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2011 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2012 Live Networks, Inc.  All rights reserved.
 // Support for temporarily setting the locale (e.g., to "C" or "POSIX") for (e.g.) parsing or printing
 // floating-point numbers in protocol headers, or calling toupper()/tolower() on human-input strings.
 // C++ header
@@ -42,15 +42,9 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #endif
 
 #ifndef LOCALE_NOT_USED
+#include <locale.h>
 #ifndef XLOCALE_NOT_USED
-#include <xlocale.h>
-#ifndef LC_ALL_MASK
-// Hack: We had a header file "xlocale.h", but if didn't give us all that we wanted.  Use the old "setlocale()" instead:
-#define XLOCALE_NOT_USED 1
-#include <locale.h>
-#endif
-#else
-#include <locale.h>
+#include <xlocale.h> // because, on some systems, <locale.h> doesn't include <xlocale.h>; this makes sure that we get both
 #endif
 #endif
 
